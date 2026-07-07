@@ -65,10 +65,13 @@ st.markdown(
     }
 
     .dashboard-title {
-        font-size: 2.1rem;
-        font-weight: 800;
-        color: #172033;
-        margin-bottom: 0.2rem;
+        font-size: clamp(1.6rem, 3vw, 2.3rem);
+    font-weight: 800;
+    color: #172033;
+    margin-bottom: 0.2rem;
+    line-height: 1.25;
+    white-space: normal;
+    word-break: keep-all;
     }
 
     .dashboard-subtitle {
@@ -525,7 +528,7 @@ def dataframe_to_csv_download(df):
 # 11. 사이드바: 데이터 업로드 및 모델 설정
 # ============================================================
 
-st.sidebar.title("⚙️ CMP AI Control")
+st.sidebar.title("⚙️ PRISM")
 
 st.sidebar.markdown("### 1. 논문 CSV 데이터")
 uploaded_files = st.sidebar.file_uploader(
@@ -664,14 +667,10 @@ current_prediction = float(model.predict(current_input_df)[0])
 # 13. 메인 헤더
 # ============================================================
 
-st.markdown(
-    """
-    <div class="dashboard-title">⚙️ CMP 공정 의사결정 지원 플랫폼</div>
-    <div class="dashboard-subtitle">
-    Oxide CMP Process Data Analytics · RandomForest MRR Prediction · SHAP Explainable AI · Process Optimization
-    </div>
-    """,
-    unsafe_allow_html=True
+st.markdown("## ⚙️ PRISM CMP 공정 의사결정 지원 플랫폼")
+st.caption(
+    "Oxide CMP Process Data Analytics · RandomForest MRR Prediction · "
+    "SHAP Explainable AI · Process Optimization"
 )
 
 top1, top2, top3, top4 = st.columns(4)
