@@ -1195,7 +1195,7 @@ if st.button("질문하기"):
             with st.spinner("AI가 답변을 생성하는 중입니다..."):
 
                 response = client.models.generate_content(
-                    model="gemini-2.5-flash",
+                    model="gemini-3.5-flash",
                     contents=f"""
 당신은 PRISM CMP 공정 의사결정 지원 플랫폼의 AI 공정 엔지니어입니다.
 
