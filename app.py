@@ -156,7 +156,6 @@ FEATURE_COLUMNS = [
     "Pad Speed",
     "Carrier Speed",
     "Slurry Flow Rate",
-    "Polishing Time"
 ]
 
 TARGET_COLUMN = "MRR"
@@ -168,7 +167,6 @@ UNIT_MAP = {
     "Pad Speed": "rpm",
     "Carrier Speed": "rpm",
     "Slurry Flow Rate": "mL/min",
-    "Polishing Time": "sec",
     "MRR": "nm/min"
 }
 
@@ -260,7 +258,6 @@ def generate_virtual_cmp_data(n_rows=120, seed=42):
     pad_speed = rng.uniform(40.0, 120.0, n_rows)
     carrier_speed = rng.uniform(30.0, 100.0, n_rows)
     slurry_flow = rng.uniform(100.0, 300.0, n_rows)
-    polishing_time = rng.uniform(30.0, 120.0, n_rows)
 
     noise = rng.normal(0, 7.0, n_rows)
 
@@ -270,7 +267,6 @@ def generate_virtual_cmp_data(n_rows=120, seed=42):
         + 0.42 * pad_speed
         + 0.20 * carrier_speed
         + 0.075 * slurry_flow
-        + 0.09 * polishing_time
         - 1.40 * pressure ** 2
         - 0.0009 * (pad_speed - 95) ** 2
         + 4.0 * np.sin(slurry_flow / 55)
@@ -282,7 +278,6 @@ def generate_virtual_cmp_data(n_rows=120, seed=42):
         "Pad Speed": pad_speed.round(3),
         "Carrier Speed": carrier_speed.round(3),
         "Slurry Flow Rate": slurry_flow.round(3),
-        "Polishing Time": polishing_time.round(3),
         "MRR": mrr.round(3),
         "Paper ID": "Virtual Dataset",
         "Table/Figure": "Generated"
@@ -496,8 +491,7 @@ def optimize_process_conditions(
         "Pressure": rng.uniform(pressure_range[0], pressure_range[1], n_candidates),
         "Pad Speed": rng.uniform(pad_speed_range[0], pad_speed_range[1], n_candidates),
         "Carrier Speed": rng.uniform(carrier_speed_range[0], carrier_speed_range[1], n_candidates),
-        "Slurry Flow Rate": rng.uniform(slurry_flow_range[0], slurry_flow_range[1], n_candidates),
-        "Polishing Time": rng.uniform(polishing_time_range[0], polishing_time_range[1], n_candidates)
+        "Slurry Flow Rate": rng.uniform(slurry_flow_range[0], slurry_flow_range[1], n_candidates)
     })
 
     predictions = model.predict(candidates[FEATURE_COLUMNS])
@@ -510,7 +504,6 @@ def optimize_process_conditions(
         + (candidates["Pad Speed"] - pad_speed_range[0]) / (pad_speed_range[1] - pad_speed_range[0]) * 0.25
         + (candidates["Carrier Speed"] - carrier_speed_range[0]) / (carrier_speed_range[1] - carrier_speed_range[0]) * 0.15
         + (candidates["Slurry Flow Rate"] - slurry_flow_range[0]) / (slurry_flow_range[1] - slurry_flow_range[0]) * 0.15
-        + (candidates["Polishing Time"] - polishing_time_range[0]) / (polishing_time_range[1] - polishing_time_range[0]) * 0.10
     )
 
     candidates["Recommendation Score"] = (
@@ -546,7 +539,7 @@ uploaded_files = st.sidebar.file_uploader(
     "논문에서 정리한 CSV 파일을 여러 개 업로드",
     type=["csv"],
     accept_multiple_files=True,
-    help="필수 컬럼: Pressure, Pad Speed, Carrier Speed, Slurry Flow Rate, Polishing Time, MRR"
+    help="필수 컬럼: Pressure, Pad Speed, Carrier Speed, Slurry Flow Rate, MRR"
 )
 
 use_virtual_when_empty = st.sidebar.checkbox(
@@ -642,13 +635,7 @@ slurry_flow_input = st.sidebar.slider(
     5.0
 )
 
-polishing_time_input = st.sidebar.slider(
-    "Polishing Time [sec]",
-    30.0,
-    120.0,
-    75.0,
-    1.0
-)
+
 
 
 # ============================================================
@@ -667,8 +654,7 @@ current_input_df = pd.DataFrame([{
     "Pressure": pressure_input,
     "Pad Speed": pad_speed_input,
     "Carrier Speed": carrier_speed_input,
-    "Slurry Flow Rate": slurry_flow_input,
-    "Polishing Time": polishing_time_input
+    "Slurry Flow Rate": slurry_flow_input
 }])
 
 current_prediction = float(model.predict(current_input_df)[0])
@@ -1088,13 +1074,6 @@ with tab4:
             5.0
         )
 
-        polishing_time_range = st.slider(
-            "Polishing Time Range [sec]",
-            30.0,
-            120.0,
-            (30.0, 120.0),
-            1.0
-        )
 
         run_optimization = st.button("최적 공정 조건 추천", type="primary")
 
@@ -1113,7 +1092,6 @@ with tab4:
             - Pressure가 너무 높은지
             - Pad Speed가 너무 높은지
             - Slurry Flow Rate가 과도한지
-            - Polishing Time이 과도한지
             """
         )
 
@@ -1142,7 +1120,6 @@ with tab4:
             f"Pad Speed {best['Pad Speed']:.2f} rpm, "
             f"Carrier Speed {best['Carrier Speed']:.2f} rpm, "
             f"Slurry Flow Rate {best['Slurry Flow Rate']:.2f} mL/min, "
-            f"Polishing Time {best['Polishing Time']:.2f} sec입니다. "
             f"예측 MRR은 {best['Predicted MRR']:.2f} nm/min입니다."
         )
 
@@ -1207,7 +1184,6 @@ if st.button("질문하기"):
 - Pad Speed
 - Carrier Speed
 - Slurry Flow Rate
-- Polishing Time
 - RandomForest
 - SHAP
 - 반도체 공정 최적화
