@@ -292,12 +292,23 @@ def save_cmp_data_to_supabase(clean_df, admin_name, uploaded_filename):
             batch = records[start:start + batch_size]
 
             (
-                supabase
-                .table("cmp_data")
-                .insert(batch)
-                .execute()
-            )
-
+    supabase
+    .table("cmp_data")
+    .upsert(
+        batch,
+        on_conflict=(
+            "pressure,"
+            "pad_speed,"
+            "carrier_speed,"
+            "slurry_flow_rate,"
+            "mrr,"
+            "paper_id,"
+            "table_figure"
+        ),
+        ignore_duplicates=True
+    )
+    .execute()
+)
         st.cache_data.clear()
         st.cache_resource.clear()
 
@@ -707,6 +718,61 @@ else:
         st.sidebar.info(
             "공용 데이터를 업로드하려면 관리자 로그인이 필요합니다."
         )
+
+if is_admin and supabase is not None:
+    st.sidebar.divider()
+    st.sidebar.markdown("### 공용 데이터 삭제")
+
+    shared_delete_df = load_shared_cmp_data()
+
+    if not shared_delete_df.empty and "Uploaded File" in shared_delete_df.columns:
+        file_options = sorted(
+            shared_delete_df["Uploaded File"]
+            .dropna()
+            .astype(str)
+            .unique()
+            .tolist()
+        )
+
+        selected_delete_file = st.sidebar.selectbox(
+            "삭제할 업로드 파일",
+            options=file_options,
+            key="delete_uploaded_file"
+        )
+
+        confirm_delete = st.sidebar.checkbox(
+            "선택한 파일의 데이터를 삭제하는 데 동의합니다.",
+            key="confirm_delete_file"
+        )
+
+        if st.sidebar.button(
+            "선택 파일 데이터 삭제",
+            use_container_width=True
+        ):
+            if not confirm_delete:
+                st.sidebar.warning("삭제 동의란을 체크해주세요.")
+
+            else:
+                try:
+                    (
+                        supabase
+                        .table("cmp_data")
+                        .delete()
+                        .eq("uploaded_file", selected_delete_file)
+                        .execute()
+                    )
+
+                    st.cache_data.clear()
+                    st.cache_resource.clear()
+
+                    st.sidebar.success(
+                        f"{selected_delete_file} 데이터를 삭제했습니다."
+                    )
+
+                    st.rerun()
+
+                except Exception as e:
+                    st.sidebar.error(f"삭제 실패: {e}")
 # ============================================================
 # 공용 데이터 불러오기
 # ============================================================
