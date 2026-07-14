@@ -17,9 +17,10 @@
 #   pip install -r requirements.txt
 #   streamlit run app.py
 # ============================================================
-
+import time
 import streamlit as st
 from google import genai
+from google.genai import types
 
 import io
 import warnings
@@ -1168,38 +1169,77 @@ if st.button("질문하기"):
         st.warning("질문을 입력해주세요.")
 
     else:
-        try:
-            with st.spinner("AI가 답변을 생성하는 중입니다..."):
-
-                response = client.models.generate_content(
-                    model="gemini-3.5-flash",
-                    contents=f"""
+        prompt = f"""
 당신은 PRISM CMP 공정 의사결정 지원 플랫폼의 AI 공정 엔지니어입니다.
 
-다음 분야의 전문가처럼 답변하세요.
+CMP, MRR, Pressure, Pad Speed, Carrier Speed, Slurry Flow Rate,
+RandomForest, SHAP, 공정 최적화 관점에서 답변하세요.
 
-- CMP(Chemical Mechanical Polishing)
-- MRR(Material Removal Rate)
-- Pressure
-- Pad Speed
-- Carrier Speed
-- Slurry Flow Rate
-- RandomForest
-- SHAP
-- 반도체 공정 최적화
+답변은 한국어로 간결하게 작성하세요.
+핵심 결론을 먼저 말하고 설명은 최대 5문장으로 제한하세요.
 
 사용자 질문:
 {user_question}
-
-답변은 한국어로 작성하고,
-가능하면 이유와 개선 방향까지 설명하세요.
 """
+
+        # 첫 번째 모델 실패 시 두 번째 모델로 전환
+        model_list = [
+            "gemini-3.1-flash-lite",
+            "gemini-3.5-flash"
+        ]
+
+        answer_box = st.empty()
+        success = False
+        last_error = None
+
+        for model_name in model_list:
+
+            # 모델마다 최대 3번 재시도
+            for attempt in range(3):
+                try:
+                    full_answer = ""
+
+                    response_stream = client.models.generate_content_stream(
+                        model=model_name,
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            max_output_tokens=300,
+                            temperature=0.3
+                        )
+                    )
+
+                    for chunk in response_stream:
+                        if chunk.text:
+                            full_answer += chunk.text
+                            answer_box.markdown(full_answer + " ▌")
+
+                    answer_box.markdown(full_answer)
+                    success = True
+                    break
+
+                except Exception as e:
+                    last_error = str(e)
+
+                    if "503" in last_error or "UNAVAILABLE" in last_error:
+                        wait_time = 2 ** attempt
+                        answer_box.info(
+                            f"AI 서버가 혼잡합니다. {wait_time}초 후 다시 시도합니다."
+                        )
+                        time.sleep(wait_time)
+                    else:
+                        break
+
+            if success:
+                break
+
+        if not success:
+            if last_error and ("503" in last_error or "UNAVAILABLE" in last_error):
+                st.error(
+                    "현재 Gemini 서버 사용량이 많아 답변을 생성하지 못했습니다. "
+                    "잠시 후 다시 질문해주세요."
                 )
-
-            st.success(response.text)
-
-        except Exception as e:
-            st.error(f"오류가 발생했습니다.\n\n{e}")
+            else:
+                st.error(f"AI 답변 생성 중 오류가 발생했습니다: {last_error}")
 # ============================================================
 # 15. 하단 안내
 # ============================================================
