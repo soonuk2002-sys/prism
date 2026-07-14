@@ -18,6 +18,9 @@
 #   streamlit run app.py
 # ============================================================
 
+import streamlit as st
+from openai import OpenAI
+
 import io
 import warnings
 from datetime import datetime
@@ -36,6 +39,8 @@ from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 warnings.filterwarnings("ignore")
 
 
+
+
 # ============================================================
 # 1. Streamlit 기본 설정
 # ============================================================
@@ -47,7 +52,13 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-
+try:
+    client = OpenAI(
+        api_key=st.secrets["OPENAI_API_KEY"]
+    )
+except Exception:
+    client = None
+    
 # ============================================================
 # 2. 커스텀 CSS
 # ============================================================
@@ -1161,7 +1172,49 @@ with tab4:
         fig_opt.update_layout(height=480)
         st.plotly_chart(fig_opt, use_container_width=True)
 
+st.divider()
+st.header("🤖 AI 공정 전문가")
 
+user_question = st.text_input("CMP 공정에 대해 질문하세요.")
+
+if st.button("질문하기"):
+    if client is None:
+        st.error("OpenAI API Key가 등록되지 않았습니다.")
+
+    elif user_question:
+        with st.spinner("답변 생성 중..."):
+
+            response = client.responses.create(
+                model="gpt-4.1-mini",
+                input=[
+                    {
+                        "role": "system",
+                        "content": """
+당신은 PRISM CMP Decision Platform의 AI 엔지니어이다.
+
+사용자의 질문에 대해
+- CMP 공정
+- MRR
+- Pressure
+- Pad Speed
+- Carrier Speed
+- Slurry
+- SHAP 분석
+- RandomForest 예측
+- 반도체 공정 최적화
+
+관점에서 전문가 수준으로 답변한다.
+답변은 한국어로 작성한다.
+"""
+                    },
+                    {
+                        "role": "user",
+                        "content": user_question
+                    }
+                ]
+            )
+
+        st.success(response.output_text)
 # ============================================================
 # 15. 하단 안내
 # ============================================================
