@@ -349,10 +349,6 @@ def normalize_column_name(col):
             "slurry flow rate", "slurry flow rate ml min", "slurry flow",
             "flow rate", "flow rate ml min", "slurry rate", "slurry supply"
         ],
-        "Polishing Time": [
-            "polishing time", "polishing time sec", "polishing time s",
-            "time", "time sec", "process time", "duration"
-        ],
         "MRR": [
             "mrr", "mrr nm min", "material removal rate",
             "removal rate", "polishing rate", "oxide removal rate"
@@ -622,7 +618,6 @@ def optimize_process_conditions(
     pad_speed_range,
     carrier_speed_range,
     slurry_flow_range,
-    polishing_time_range,
     n_candidates,
     random_state=42
 ):
@@ -1393,7 +1388,6 @@ with tab4:
             pad_speed_range=pad_speed_range,
             carrier_speed_range=carrier_speed_range,
             slurry_flow_range=slurry_flow_range,
-            polishing_time_range=polishing_time_range,
             n_candidates=n_candidates,
             random_state=int(random_state)
         )
