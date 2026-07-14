@@ -21,7 +21,7 @@ import time
 import streamlit as st
 from google import genai
 from google.genai import types
-
+from supabase import create_client, Client
 import io
 import warnings
 from datetime import datetime
@@ -59,7 +59,15 @@ try:
     )
 except Exception:
     client = None
-    
+
+try:
+    supabase: Client = create_client(
+        st.secrets["SUPABASE_URL"],
+        st.secrets["SUPABASE_KEY"]
+    )
+except Exception as e:
+    supabase = None
+    supabase_error = str(e)
 # ============================================================
 # 2. 커스텀 CSS
 # ============================================================
@@ -171,7 +179,132 @@ UNIT_MAP = {
     "MRR": "nm/min"
 }
 
+def get_admin_account(input_password):
+    """
+    입력된 비밀번호가 관리자 4명 중 누구의 것인지 확인한다.
+    일치하지 않으면 None을 반환한다.
+    """
 
+    admin_accounts = {
+        st.secrets.get("ADMIN_PASSWORD_1", ""):
+            st.secrets.get("ADMIN_NAME_1", "관리자 1"),
+
+        st.secrets.get("ADMIN_PASSWORD_2", ""):
+            st.secrets.get("ADMIN_NAME_2", "관리자 2"),
+
+        st.secrets.get("ADMIN_PASSWORD_3", ""):
+            st.secrets.get("ADMIN_NAME_3", "관리자 3"),
+
+        st.secrets.get("ADMIN_PASSWORD_4", ""):
+            st.secrets.get("ADMIN_NAME_4", "관리자 4")
+    }
+
+    # Secrets에 등록되지 않은 빈 비밀번호 제거
+    admin_accounts = {
+        password: name
+        for password, name in admin_accounts.items()
+        if password
+    }
+
+    return admin_accounts.get(input_password)
+
+@st.cache_data(ttl=60)
+def load_shared_cmp_data():
+    """
+    Supabase의 공용 CMP 데이터를 불러온다.
+    최대 10,000행까지 조회한다.
+    """
+
+    if supabase is None:
+        return pd.DataFrame()
+
+    try:
+        response = (
+            supabase
+            .table("cmp_data")
+            .select("*")
+            .range(0, 9999)
+            .execute()
+        )
+
+        if not response.data:
+            return pd.DataFrame()
+
+        db_df = pd.DataFrame(response.data)
+
+        rename_map = {
+            "pressure": "Pressure",
+            "pad_speed": "Pad Speed",
+            "carrier_speed": "Carrier Speed",
+            "slurry_flow_rate": "Slurry Flow Rate",
+            "mrr": "MRR",
+            "paper_id": "Paper ID",
+            "table_figure": "Table/Figure",
+            "uploaded_file": "Uploaded File",
+            "uploaded_by": "Uploaded By",
+            "uploaded_at": "Uploaded At"
+        }
+
+        db_df = db_df.rename(columns=rename_map)
+
+        return db_df
+
+    except Exception as e:
+        st.error(f"공용 데이터 불러오기 실패: {e}")
+        return pd.DataFrame()
+
+def save_cmp_data_to_supabase(clean_df, admin_name, uploaded_filename):
+    """
+    정리된 CSV 데이터를 Supabase 공용 테이블에 저장한다.
+    """
+
+    if supabase is None:
+        return False, "Supabase 연결이 설정되지 않았습니다."
+
+    try:
+        upload_df = clean_df.copy()
+
+        records = []
+
+        for _, row in upload_df.iterrows():
+            record = {
+                "pressure": float(row["Pressure"]),
+                "pad_speed": float(row["Pad Speed"]),
+                "carrier_speed": float(row["Carrier Speed"]),
+                "slurry_flow_rate": float(row["Slurry Flow Rate"]),
+                "mrr": float(row["MRR"]),
+                "paper_id": str(
+                    row.get("Paper ID", "Uploaded Paper")
+                ),
+                "table_figure": str(
+                    row.get("Table/Figure", "Not specified")
+                ),
+                "uploaded_file": uploaded_filename,
+                "uploaded_by": admin_name
+            }
+
+            records.append(record)
+
+        # 한 번에 너무 많은 행을 보내지 않도록 500행씩 저장
+        batch_size = 500
+
+        for start in range(0, len(records), batch_size):
+            batch = records[start:start + batch_size]
+
+            (
+                supabase
+                .table("cmp_data")
+                .insert(batch)
+                .execute()
+            )
+
+        st.cache_data.clear()
+        st.cache_resource.clear()
+
+        return True, f"{len(records)}개 행을 공용 데이터에 저장했습니다."
+
+    except Exception as e:
+        return False, str(e)
 # ============================================================
 # 4. 컬럼명 표준화 함수
 # ============================================================
@@ -535,41 +668,131 @@ def dataframe_to_csv_download(df):
 
 st.sidebar.title("⚙️ PRISM")
 
-st.sidebar.markdown("### 1. 논문 CSV 데이터")
-uploaded_files = st.sidebar.file_uploader(
-    "논문에서 정리한 CSV 파일을 여러 개 업로드",
-    type=["csv"],
-    accept_multiple_files=True,
-    help="필수 컬럼: Pressure, Pad Speed, Carrier Speed, Slurry Flow Rate, MRR"
-)
-
 use_virtual_when_empty = st.sidebar.checkbox(
-    "업로드 데이터가 없으면 가상 데이터 사용",
+    "공용 데이터가 없으면 가상 데이터 사용",
     value=True
 )
 
-if uploaded_files:
-    merged_df, upload_errors = merge_uploaded_files(uploaded_files)
+st.sidebar.markdown("### 1. 관리자 로그인")
 
-    if merged_df is not None:
-        df = merged_df.copy()
-        data_status = "논문 CSV 업로드 데이터"
+admin_password = st.sidebar.text_input(
+    "관리자 비밀번호",
+    type="password",
+    key="admin_password"
+)
+
+admin_name = get_admin_account(admin_password)
+is_admin = admin_name is not None
+
+if is_admin:
+    st.sidebar.success(f"{admin_name}님으로 로그인되었습니다.")
+
+    uploaded_files = st.sidebar.file_uploader(
+        "공용 학습 CSV 업로드",
+        type=["csv"],
+        accept_multiple_files=True,
+        help=(
+            "필수 컬럼: Pressure, Pad Speed, Carrier Speed, "
+            "Slurry Flow Rate, MRR"
+        ),
+        key="admin_csv_uploader"
+    )
+
+else:
+    uploaded_files = None
+
+    if admin_password:
+        st.sidebar.error("관리자 비밀번호가 올바르지 않습니다.")
     else:
-        df = generate_virtual_cmp_data()
-        data_status = "가상 데이터"
-        st.sidebar.error("업로드 파일을 읽지 못해 가상 데이터로 실행합니다.")
+        st.sidebar.info(
+            "공용 데이터를 업로드하려면 관리자 로그인이 필요합니다."
+        )
+# ============================================================
+# 공용 데이터 불러오기
+# ============================================================
 
-    if upload_errors:
-        with st.sidebar.expander("업로드 오류 로그"):
-            for log in upload_errors:
-                st.write(f"- {log['file']}: {log['error']}")
+shared_df = load_shared_cmp_data()
+
+# 관리자가 새 CSV 파일을 올린 경우
+if is_admin and uploaded_files:
+
+    if st.sidebar.button(
+        "공용 데이터에 저장",
+        type="primary",
+        use_container_width=True
+    ):
+        merged_df, upload_errors = merge_uploaded_files(uploaded_files)
+
+        if merged_df is not None:
+
+            total_saved_rows = 0
+            save_errors = []
+
+            for uploaded_file in uploaded_files:
+                try:
+                    uploaded_file.seek(0)
+                    raw_df = pd.read_csv(uploaded_file)
+
+                    is_valid, clean_df, errors = validate_and_clean_data(
+                        raw_df
+                    )
+
+                    if not is_valid:
+                        save_errors.append(
+                            f"{uploaded_file.name}: {', '.join(errors)}"
+                        )
+                        continue
+
+                    success, message = save_cmp_data_to_supabase(
+                        clean_df=clean_df,
+                        admin_name=admin_name,
+                        uploaded_filename=uploaded_file.name
+                    )
+
+                    if success:
+                        total_saved_rows += len(clean_df)
+                    else:
+                        save_errors.append(
+                            f"{uploaded_file.name}: {message}"
+                        )
+
+                except Exception as e:
+                    save_errors.append(
+                        f"{uploaded_file.name}: {e}"
+                    )
+
+            if total_saved_rows > 0:
+                st.sidebar.success(
+                    f"총 {total_saved_rows}개 행을 저장했습니다."
+                )
+
+                st.cache_data.clear()
+                st.rerun()
+
+            if save_errors:
+                with st.sidebar.expander("저장 오류"):
+                    for error in save_errors:
+                        st.write(error)
+
+        else:
+            st.sidebar.error("업로드된 CSV를 읽을 수 없습니다.")
+
+# 모든 사용자는 Supabase 공용 데이터를 사용
+shared_df = load_shared_cmp_data()
+
+if not shared_df.empty:
+    df = shared_df.copy()
+    data_status = "공용 누적 CMP 데이터"
 
 else:
     if use_virtual_when_empty:
         df = generate_virtual_cmp_data()
         data_status = "가상 데이터"
     else:
-        st.warning("CSV 파일을 업로드해야 분석을 시작할 수 있습니다.")
+        st.warning(
+            "아직 공용 CMP 데이터가 없습니다. "
+            "관리자가 CSV를 업로드해야 합니다."
+        )
         st.stop()
 
 
