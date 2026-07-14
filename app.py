@@ -19,7 +19,7 @@
 # ============================================================
 
 import streamlit as st
-from openai import OpenAI
+from google import genai
 
 import io
 import warnings
@@ -53,8 +53,8 @@ st.set_page_config(
 )
 
 try:
-    client = OpenAI(
-        api_key=st.secrets["OPENAI_API_KEY"]
+    client = genai.Client(
+        api_key=st.secrets["GEMINI_API_KEY"]
     )
 except Exception:
     client = None
@@ -1173,48 +1173,57 @@ with tab4:
         st.plotly_chart(fig_opt, use_container_width=True)
 
 st.divider()
+# ============================================================
+# AI 공정 전문가 (Gemini)
+# ============================================================
+
+st.divider()
 st.header("🤖 AI 공정 전문가")
 
 user_question = st.text_input("CMP 공정에 대해 질문하세요.")
 
 if st.button("질문하기"):
+
     if client is None:
-        st.error("OpenAI API Key가 등록되지 않았습니다.")
+        st.error("Gemini API Key가 등록되지 않았습니다.")
 
-    elif user_question:
-        with st.spinner("답변 생성 중..."):
+    elif not user_question.strip():
+        st.warning("질문을 입력해주세요.")
 
-            response = client.responses.create(
-                model="gpt-4.1-mini",
-                input=[
-                    {
-                        "role": "system",
-                        "content": """
-당신은 PRISM CMP Decision Platform의 AI 엔지니어이다.
+    else:
+        try:
+            with st.spinner("AI가 답변을 생성하는 중입니다..."):
 
-사용자의 질문에 대해
-- CMP 공정
-- MRR
+                response = client.models.generate_content(
+                    model="gemini-2.5-flash",
+                    contents=f"""
+당신은 PRISM CMP 공정 의사결정 지원 플랫폼의 AI 공정 엔지니어입니다.
+
+다음 분야의 전문가처럼 답변하세요.
+
+- CMP(Chemical Mechanical Polishing)
+- MRR(Material Removal Rate)
 - Pressure
 - Pad Speed
 - Carrier Speed
-- Slurry
-- SHAP 분석
-- RandomForest 예측
+- Slurry Flow Rate
+- Polishing Time
+- RandomForest
+- SHAP
 - 반도체 공정 최적화
 
-관점에서 전문가 수준으로 답변한다.
-답변은 한국어로 작성한다.
-"""
-                    },
-                    {
-                        "role": "user",
-                        "content": user_question
-                    }
-                ]
-            )
+사용자 질문:
+{user_question}
 
-        st.success(response.output_text)
+답변은 한국어로 작성하고,
+가능하면 이유와 개선 방향까지 설명하세요.
+"""
+                )
+
+            st.success(response.text)
+
+        except Exception as e:
+            st.error(f"오류가 발생했습니다.\n\n{e}")
 # ============================================================
 # 15. 하단 안내
 # ============================================================
